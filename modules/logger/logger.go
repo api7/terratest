@@ -39,6 +39,8 @@ var (
 	// TestingT can be used to use Go's testing.T to log. If this is used, but no testing.T is provided, it will fallback
 	// to Default.
 	TestingT = New(testingT{})
+	// Global
+	Global = New(terratestLogger{extraDepth: 1})
 )
 
 type TestLogger interface {
@@ -87,7 +89,7 @@ func (_ testingT) Logf(t testing.TestingT, format string, args ...interface{}) {
 	tt, ok := t.(*gotesting.T)
 	if !ok {
 		// fallback
-		DoLog(t, 2, os.Stdout, fmt.Sprintf(format, args...))
+		doLog(t, 2, os.Stdout, fmt.Sprintf(format, args...))
 		return
 	}
 
@@ -96,10 +98,12 @@ func (_ testingT) Logf(t testing.TestingT, format string, args ...interface{}) {
 	return
 }
 
-type terratestLogger struct{}
+type terratestLogger struct {
+	extraDepth int
+}
 
-func (_ terratestLogger) Logf(t testing.TestingT, format string, args ...interface{}) {
-	DoLog(t, 3, os.Stdout, fmt.Sprintf(format, args...))
+func (l terratestLogger) Logf(t testing.TestingT, format string, args ...interface{}) {
+	doLog(t, 3+l.extraDepth, os.Stdout, fmt.Sprintf(format, args...))
 }
 
 // Deprecated: use Logger instead, as it provides more flexibility on logging.
@@ -124,7 +128,7 @@ func Logf(t testing.TestingT, format string, args ...interface{}) {
 		tt.Helper()
 	}
 
-	DoLog(t, 2, os.Stdout, fmt.Sprintf(format, args...))
+	Global.Logf(t, format, args...)
 }
 
 // Log logs the given arguments to stdout, along with a timestamp and information about what test and file is doing the
@@ -135,12 +139,18 @@ func Log(t testing.TestingT, args ...interface{}) {
 		tt.Helper()
 	}
 
-	DoLog(t, 2, os.Stdout, args...)
+	//doLog(t, 2, os.Stdout, args...)
+	for _, arg := range args {
+		str, ok := arg.(string)
+		if ok {
+			Global.Logf(t, "%s", str)
+		}
+	}
 }
 
-// DoLog logs the given arguments to the given writer, along with a timestamp and information about what test and file is
+// doLog logs the given arguments to the given writer, along with a timestamp and information about what test and file is
 // doing the logging.
-func DoLog(t testing.TestingT, callDepth int, writer io.Writer, args ...interface{}) {
+func doLog(t testing.TestingT, callDepth int, writer io.Writer, args ...interface{}) {
 	date := time.Now()
 	prefix := fmt.Sprintf("%s %s %s:", t.Name(), date.Format(time.RFC3339), CallerPrefix(callDepth+1))
 	allArgs := append([]interface{}{prefix}, args...)
